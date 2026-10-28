@@ -106,3 +106,23 @@ Alternatives: mount immediately (unstyled flash, wrong measurements).
 
 ## Known risk: jsdom proves the logic, not real browser timing
 Reason: jsdom ignores srcdoc and never loads stylesheets. Manual checks in Chrome and Firefox are part of step 3.
+
+## EntryView calls entry.render() as the body of a component (hooks allowed)
+Reason: render entries are most natural when they can use useState and friends, and a throw lands below the error boundary.
+Alternatives: require entries to return elements only (surprising restriction, hooks would break).
+
+## Entries are remounted when the entry object changes, not only the id
+Reason: HMR replaces entries with the same id. A different hook order in the new render() would otherwise corrupt React state.
+Alternatives: key by id (stale state after hot reload).
+
+## The error boundary resets when entry, args or env change
+Reason: a crash caused by one arg value must be fixable by editing that arg.
+Alternatives: reset only on entry change (user stuck until reload).
+
+## Known limitation: errors in event handlers and async callbacks are not caught
+Reason: React error boundaries do not catch them, and mount entries' timers (GSAP, setTimeout) run outside our code. They reach the console.
+Alternatives: wrap window.onerror in the iframe (noisy, global, and out of v0.1 scope).
+
+## args and env must be referentially stable between renders
+Reason: EntryView compares them by identity to decide between update and remount. The Playground memoises them.
+Alternatives: deep compare (cost on every render, and env holds window/document).
