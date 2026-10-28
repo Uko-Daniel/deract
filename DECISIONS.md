@@ -79,3 +79,30 @@ Alternatives: mount immediately (flash of unstyled content, wrong measurements).
 ## Extra stylesheets (props.stylesheets) are placed after the mirrored host styles
 Reason: lets the Playground user override host CSS predictably.
 Alternatives: before (host CSS would win conflicts).
+
+## The iframe uses srcdoc only for a doctype and consistent async loading
+Reason: jsdom ignores srcdoc content, and browsers differ in timing for blank iframes. We build the structure in code after load, which works everywhere.
+Alternatives: write into a blank iframe (quirks mode, Firefox timing issues).
+
+## Contexts are applied to the iframe's <html> element
+Reason: `color-scheme` and `:root[data-theme]` selectors only work on the root element. In isolation "none", the plain div is the root.
+Alternatives: apply to a wrapper div inside the iframe (breaks `color-scheme` for the page background).
+
+## props.stylesheets is read once; the Playground changes the React key to reload them
+Reason: avoids a second sync mechanism.
+Alternatives: live-diff the link list (more code for a rare case).
+
+## With isolation "none", props.stylesheets is ignored
+Reason: the host page already has its styles, and injecting links into the host head is surprising.
+Alternatives: append links to the host head (leaks into the playground chrome).
+
+## Viewport size comes from the iframe window's resize event
+Reason: no ResizeObserver needed. jsdom has none, and the iframe window already reports its size.
+Alternatives: ResizeObserver on the frame (needs a polyfill in tests).
+
+## Canvas children are not rendered until the iframe is ready and its styles loaded (2s cap)
+Reason: entries never mount into a half-built document.
+Alternatives: mount immediately (unstyled flash, wrong measurements).
+
+## Known risk: jsdom proves the logic, not real browser timing
+Reason: jsdom ignores srcdoc and never loads stylesheets. Manual checks in Chrome and Firefox are part of step 3.
