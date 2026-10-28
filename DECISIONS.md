@@ -39,3 +39,23 @@ Alternatives: validate inside the hash module (couples it to the registry).
 ## The hash stores only user edits to args, not defaults
 Reason: shorter URLs, and links keep working when defaults change.
 Alternatives: store all args (long URLs, stale on default changes).
+
+## Mount runner empties the container after every teardown
+Reason: entries that don't clean their own DOM would otherwise stack up on remount.
+Alternatives: trust entries to clean up (leaks, duplicated UI).
+
+## Errors from mount/update go to the error panel; errors from cleanup go to console.error
+Reason: a cleanup error shown in the panel would be hidden by the next successful mount.
+Alternatives: show both in the panel (cleanup errors would flash and vanish).
+
+## A throwing update tears the entry down; the next change remounts
+Reason: after a failed update the entry's internal state is unknown.
+Alternatives: keep the half-updated entry (risk of stuck UI).
+
+## A mount() that throws cannot be cleaned up by us
+Reason: it never returned a handle. The runner clears the container, but timers or listeners created before the throw are the entry's responsibility.
+Alternatives: none possible without a different API.
+
+## The runner calls onError(null) after every success
+Reason: the UI clears a stale error panel without extra state tracking.
+Alternatives: a separate onSuccess callback (more API for the same result).
