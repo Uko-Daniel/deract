@@ -1,139 +1,41 @@
+
+---
+
+# `DECISIONS.md`
+
+```md
 # Decisions
 
-## `defineComponent<const C>` instead of `<C>`
-Reason: without `const`, select options widen to `string[]` and the union is lost.
-Alternatives: require `as const` at every call site (worse DX).
+Every design choice, with the reason and the alternatives considered. Deviations from the spec are called out explicitly. Chronological, oldest first.
 
-## "Duplicate variant names" is not validated
-Reason: variants is an object literal, so duplicate keys are overwritten before our code runs and can't be detected.
-Instead we validate that variant keys exist in controls and that values match their control. Alternatives: make variants an array (changes the spec's public API).
+---
 
-## Validation always runs and throws (not dev-only)
-Reason: it costs microseconds, adds no dependency on `process.env`, and gives the same errors in every bundler.
-Alternatives: strip in production via `import.meta.env.DEV` (not portable across bundlers).
+## The hook stores the raw (hash-shaped) selection and validates everything at read time
+Reason: stale or hand-edited URLs can never put the playground in a broken state.
+Alternatives: validate on write (misses registry changes such as HMR removing a variant).
 
-## `applyContext` is exported from `contexts.ts` but not from the package index
-Reason: the playground needs it, and the spec says no extra public exports.
-Alternatives: inline the logic in the playground (harder to test without React).
+## Selecting a variant or entry clears user edits; contexts and viewport persist across entries
+Reason: a preset should start clean, but your chosen theme and width should survive browsing.
+Alternatives: keep edits across variants (confusing), reset everything on entry change (annoying).
 
-## "Other" group is always listed last
-Reason: ungrouped entries are the least organised, so they sit below named groups.
-Alternatives: insertion order (Other could end up on top).
+## env.contexts contains only the contexts relevant to the entry
+Reason: an entry should not be updated when a context it doesn't care about changes.
+Alternatives: all contexts always (spurious updates).
 
-## Registry caches list()/groups() snapshots until the next add()
-Reason: React's useSyncExternalStore needs stable references.
-Alternatives: build new arrays each call (causes render loops).
+## Default viewport is the first preset with width null (Fit), else the first preset
+Reason: Fit is the least surprising start, and it works with custom preset lists.
 
-## `color-scheme` is set through style.setProperty
-Reason: restoring the previous inline value on cleanup, which also works in jsdom without crashing.
-Alternatives: a `colorScheme` property (not typed or supported everywhere).
+## The URL hash wins over props.initial
+Reason: reloading a shared link must restore it exactly.
 
-## `vp` in the hash holds the viewport preset id, not the width
-Reason: the spec example showed `vp=360`, but ids stay valid for custom presets (several could share a width, or be "fit").
-Alternatives: store the width (ambiguous for custom presets).
+## The hash is written with replaceState, and contains only valid user choices
+Reason: no history entries per keystroke, and invalid input never survives a reload.
+Alternatives: pushState (Back button becomes unusable).
 
-## The hash module only parses and formats; it does not validate against the registry
-Reason: it stays pure and testable. The Playground drops unknown entry, variant, context and viewport values.
-Alternatives: validate inside the hash module (couples it to the registry).
+## checkValue is exported from define-component.ts for internal reuse, not from the package index
+Reason: the hook applies the same control rules to args coming from the URL.
 
-## The hash stores only user edits to args, not defaults
-Reason: shorter URLs, and links keep working when defaults change.
-Alternatives: store all args (long URLs, stale on default changes).
-
-## Mount runner empties the container after every teardown
-Reason: entries that don't clean their own DOM would otherwise stack up on remount.
-Alternatives: trust entries to clean up (leaks, duplicated UI).
-
-## Errors from mount/update go to the error panel; errors from cleanup go to console.error
-Reason: a cleanup error shown in the panel would be hidden by the next successful mount.
-Alternatives: show both in the panel (cleanup errors would flash and vanish).
-
-## A throwing update tears the entry down; the next change remounts
-Reason: after a failed update the entry's internal state is unknown.
-Alternatives: keep the half-updated entry (risk of stuck UI).
-
-## A mount() that throws cannot be cleaned up by us
-Reason: it never returned a handle. The runner clears the container, but timers or listeners created before the throw are the entry's responsibility.
-Alternatives: none possible without a different API.
-
-## The runner calls onError(null) after every success
-Reason: the UI clears a stale error panel without extra state tracking.
-Alternatives: a separate onSuccess callback (more API for the same result).
-
-## Style mirroring reconciles the whole <head> list on every mutation
-Reason: one idempotent function is simpler and cannot drift, unlike handling add/remove/change/reorder separately.
-Alternatives: per-mutation handlers (more code, more edge cases).
-
-## Only the host's <head> is mirrored
-Reason: that is where Vite, CSS files and most CSS-in-JS dev builds put styles.
-Alternatives: also observe <body> (rare, adds cost).
-
-## Known limitation: styles created through the CSSOM are not mirrored
-Reason: insertRule(), adoptedStyleSheets and CSS-in-JS "speedy" production mode leave no DOM text to copy.
-Alternatives: serialise document.styleSheets rules (large and fragile).
-
-## Mounting waits for copied <link> stylesheets, capped at 2 seconds
-Reason: avoids entries measuring unstyled elements. The cap means a dead link cannot freeze the canvas.
-Alternatives: mount immediately (flash of unstyled content, wrong measurements).
-
-## Extra stylesheets (props.stylesheets) are placed after the mirrored host styles
-Reason: lets the Playground user override host CSS predictably.
-Alternatives: before (host CSS would win conflicts).
-
-## The iframe uses srcdoc only for a doctype and consistent async loading
-Reason: jsdom ignores srcdoc content, and browsers differ in timing for blank iframes. We build the structure in code after load, which works everywhere.
-Alternatives: write into a blank iframe (quirks mode, Firefox timing issues).
-
-## Contexts are applied to the iframe's <html> element
-Reason: `color-scheme` and `:root[data-theme]` selectors only work on the root element. In isolation "none", the plain div is the root.
-Alternatives: apply to a wrapper div inside the iframe (breaks `color-scheme` for the page background).
-
-## props.stylesheets is read once; the Playground changes the React key to reload them
-Reason: avoids a second sync mechanism.
-Alternatives: live-diff the link list (more code for a rare case).
-
-## With isolation "none", props.stylesheets is ignored
-Reason: the host page already has its styles, and injecting links into the host head is surprising.
-Alternatives: append links to the host head (leaks into the playground chrome).
-
-## Viewport size comes from the iframe window's resize event
-Reason: no ResizeObserver needed. jsdom has none, and the iframe window already reports its size.
-Alternatives: ResizeObserver on the frame (needs a polyfill in tests).
-
-## Canvas children are not rendered until the iframe is ready and its styles loaded (2s cap)
-Reason: entries never mount into a half-built document.
-Alternatives: mount immediately (unstyled flash, wrong measurements).
-
-## Known risk: jsdom proves the logic, not real browser timing
-Reason: jsdom ignores srcdoc and never loads stylesheets. Manual checks in Chrome and Firefox are part of step 3.
-
-## EntryView calls entry.render() as the body of a component (hooks allowed)
-Reason: render entries are most natural when they can use useState and friends, and a throw lands below the error boundary.
-Alternatives: require entries to return elements only (surprising restriction, hooks would break).
-
-## Entries are remounted when the entry object changes, not only the id
-Reason: HMR replaces entries with the same id. A different hook order in the new render() would otherwise corrupt React state.
-Alternatives: key by id (stale state after hot reload).
-
-## The error boundary resets when entry, args or env change
-Reason: a crash caused by one arg value must be fixable by editing that arg.
-Alternatives: reset only on entry change (user stuck until reload).
-
-## Known limitation: errors in event handlers and async callbacks are not caught
-Reason: React error boundaries do not catch them, and mount entries' timers (GSAP, setTimeout) run outside our code. They reach the console.
-Alternatives: wrap window.onerror in the iframe (noisy, global, and out of v0.1 scope).
-
-## args and env must be referentially stable between renders
-Reason: EntryView compares them by identity to decide between update and remount. The Playground memoises them.
-Alternatives: deep compare (cost on every render, and env holds window/document).
-
-## Chrome follows the OS light/dark setting (light and dark palettes, all via --dct-* variables)
-Reason: the founder wants both modes, and this matches the original spec. The canvas is never affected.
-Supersedes the earlier "light-only" decision.
-
-## Space Grotesk: option B, a bundled Latin subset as an optional `fonts.css` export
-Reason: offline-safe because the file is local, and the look appears on every machine.
-Deviation from spec: the spec said no web fonts, and the exports map gains `./fonts.css`. The font is reported separately from the size targets.
+---
 
 ## Segmented controls are native radio inputs inside a fieldset with a legend
 Reason: browsers already provide the correct keyboard model (Tab into the group, arrows change selection) and screen readers announce the group, so no custom keyboard code is needed.
@@ -154,6 +56,8 @@ Reason: the spec asks for a fully keyboard-operable sidebar, and Tab/Enter alrea
 
 ## Sidebar and Toolbar are presentational (props in, callbacks out)
 Reason: all playground logic lives in usePlaygroundState, so these panels can be tested without it.
+
+---
 
 ## Props panel inputs are the native HTML element for each control type
 Reason: real `<label>`s, real keyboard and screen-reader behaviour, no custom widgets.
@@ -177,13 +81,43 @@ Reason: sighted users see the current value; screen readers still announce "Size
 ## The copy success/failure toast resets after 1.5 s
 Reason: it is acknowledgement, not a persistent state. Matches the brief "Copied!" feedback pattern.
 
-## Chrome palette is light and dark, driven by `prefers-color-scheme` on `.dct-playground`
-Reason: matches the spec's "follows the OS", and the same token set works for a future manual toggle without any CSS changes.
+---
+
+## The canvas is an iframe by default; React entries render into it via createPortal
+Reason: a real nested browsing context means a 360 px preset fires real media queries. React attaches its own event listeners to the portal container, so clicks inside the iframe reach the React tree (covered by a test).
+Alternatives: render in a plain div (isolation: 'none' covers the rare case), shadow DOM (no media-query isolation, more code).
+
+## Canvas renders a caller-supplied child via a render prop that receives `env` and `target`
+Reason: keeps Canvas independent of EntryView, so the iframe/portal/mirroring logic is testable on its own.
+
+## Style mirroring clones host <style> and <link rel=stylesheet> with importNode, tracked in a Map, kept in sync by a MutationObserver on the host <head>
+Reason: the spec asks for mirrored styles that follow Vite CSS HMR. importNode avoids cross-document adopt edge cases. `<style>` text is re-copied when it changes in place.
+Alternatives: copy CSS rules (misses @import and relative urls), no mirroring (breaks most apps).
+
+## Contexts apply to the canvas root, using `apply` when present, otherwise `data-<id>="<optionId>"`
+Reason: matches the spec's default and lets themeContext set color-scheme through its own apply. All cleanups run on change and unmount. A throwing apply is logged and swallowed.
+
+## The viewport preset constrains the canvas frame width (with max-width: 100%), and `fit` fills
+Reason: preset widths must reach the iframe's own viewport for media queries to fire.
+
+## Canvas measures its root (ResizeObserver, with an initial synchronous measure) and reports `{width,height}` to the host and to `env.viewport`
+Reason: the toolbar readout needs the live width, and entries need the real viewport size in env. Falls back gracefully where ResizeObserver is unavailable.
+
+## `isolation: 'none'` renders in a plain div in the host document, with no portal and no mirroring
+Reason: for the rare entry that needs the host document (e.g. a global overlay).
+
+## `mountPlayground` uses `createRoot` from react-dom/client and returns `root.unmount`
+Reason: the only React-DOM imperative API in the package, isolated to the playground entry, not core.
+
+---
+
+## Chrome palette is light and dark, driven by `prefers-color-scheme` on `.dct-playground` unless overridden
+Reason: matches the spec's "follows the OS", and the same token set works for a manual toggle without any CSS changes. See the batch-1 addendum for the manual override.
 Contrast ratios checked against `--dct-surface`:
   light: ink 17.83:1, muted 5.43:1, accent 6.72:1, accent-strong on tint 7.91:1, border 3.30:1
   dark:  ink 14.49:1, muted 6.90:1, accent 7.01:1, accent-strong on tint 8.10:1, border 3.75:1
 The border tokens were darkened from the original blue-gray proposal (`#D5DCE8` light) because it fell below the WCAG 2.1 non-text 3:1 threshold; `#7F8FA3` light and `#64748B` dark pass.
-Alternatives: a lighter decorative border (fails 3:1), a manual toggle (deferred to LATER.md).
+Alternatives: a lighter decorative border (fails 3:1), a manual toggle (see later).
 
 ## `--dct-on-accent` flips between light and dark instead of forcing white
 Reason: white on #60A5FA in dark mode is only 2.54:1 (fails). Dark ink #0F172A on #60A5FA is 7.01:1. The selected segment therefore shows as a bright chip with dark text in dark mode.
@@ -193,7 +127,7 @@ Alternatives: use a darker accent in dark mode (less vivid), force white everywh
 Reason: an unlayered consumer stylesheet overrides layered rules automatically, so "override the tokens" or "restyle a control" works without `!important` or higher-specificity selectors.
 Alternatives: high-specificity selectors (fragile), CSS custom properties only (limits structural overrides).
 
-## The canvas (`iframe` body and inline root) does not follow OS dark mode; only `data-theme` on the root does
+## The canvas (iframe body and inline root) does not follow OS dark mode; only `data-theme` on the root does
 Reason: the spec is explicit. The iframe's `color-scheme: light` and the `.dct-canvas-root[data-theme]` rules make `data-theme` the only switch that affects the canvas, and give native form elements inside the canvas the correct palette when the entry uses one.
 Alternatives: let the iframe follow the OS (violates the spec), ignore `data-theme` on the root (breaks entries that rely on it).
 
@@ -204,45 +138,33 @@ Reason: the spec asks for 360 px usable; at ≤560px the whole playground become
 Reason: visible focus for keyboard users; the ring color follows the accent so it flips with the OS.
 
 ## Reduced motion: animations and transitions are killed via a `prefers-reduced-motion: reduce` block, and `scroll-behavior` is reset to `auto`
-Reason: the spec asks for `prefers-reduced-motion` respected on the chrome. Entries must do the same in their own CSS; the README will say so.
+Reason: the spec asks for `prefers-reduced-motion` respected on the chrome. Entries must do the same in their own CSS; the README and DERACT-USAGE say so.
 
-## Space Grotesk (weight 600) ships as a Latin subset at `fonts.css` + `fonts/`, opt-in
-Reason: the founder approved option B — a bundled local font, offline, but not part of the default install. `fonts.css` is a separate export, so consumers who don't import it pay zero bytes. The woff2 is fetched once, at dev time, from Google Fonts' prebuilt Latin subset (`scripts/fetch-font.mjs`) and committed; there is no runtime network call.
+---
+
+## Space Grotesk: option B — a Latin subset at `fonts.css` + `fonts/`, opt-in
+Reason: approved by the founder — a bundled local font, offline, but not part of the default install. `fonts.css` is a separate export, so consumers who don't import it pay zero bytes. The woff2 is fetched once, at dev time, from Google Fonts' prebuilt Latin subset (`scripts/fetch-font.mjs`) and committed; there is no runtime network call. Measured size: 13,284 bytes.
 Deviation from spec: the spec said "no web fonts". The font is bundled locally, under SIL OFL 1.1, and does not violate offline or "no CDN" because it loads from the package.
 Alternatives: A (font stack only — loses the look on most machines); C (self-host whole family — 3+ weights, too much weight for a wordmark).
 
 ## Error panel selectors are `.dct-error`, `.dct-error-title`, `.dct-error-stack`
-Reason: they match the component shipped in piece 4 (error.tsx). The earlier `.dct-error-panel` name is gone; a mismatch would leave the canvas error unstyled.
+Reason: they match the component shipped in piece 4 (error.tsx). A mismatch would leave the canvas error unstyled.
 
 ## Brand header spans the top of the playground (`grid-area: brand`, `grid-column: 1 / -1`)
-Reason: logo and wordmark belong to the whole playground, not to the sidebar. Sidebar is a component list; putting branding inside it conflates two things and would make the sidebar semantics odd (`<nav aria-label="Components">` containing a brand is noise for screen readers).
+Reason: logo and wordmark belong to the whole playground, not to the sidebar. Putting the brand inside `<nav aria-label="Components">` would be noise for screen readers.
 Alternatives: brand inside the sidebar header (muddies the nav landmark), no brand (loses identity).
 
 ## The inline logo uses `currentColor`, the standalone `logo.svg` uses the fixed accent
 Reason: the chrome logo must flip with the light/dark token set; the file is for docs, website and favicon where a stable brand color is correct.
 
 ## `fonts.css` falls back gracefully when the woff2 is missing
-Reason: consumers who clone the repo without running `pnpm fonts:fetch` still get a working playground with system fonts. No test asserts on the font loading, so a missing file cannot fail CI.
+Reason: consumers who clone the repo without running `pnpm fonts:fetch` still get a working playground with system fonts. No test asserts on font loading, so a missing file cannot fail CI.
 
+---
 
-## `DECISIONS.md` addendum
-
-```md
 ## The example aliases `@atlis/deract/*` at source level for dev
-Reason: the library's `exports` map points at `dist/`, and `dist` is produced by the build that piece 8 introduces. The example must run without requiring a prior `pnpm build`, otherwise `pnpm -C examples/vite-react dev` fails out of the box. Vite aliases with exact regex entries (`playground`, `styles.css`, `fonts.css`, then bare `@atlis/deract`) and `dedupe: ['react', 'react-dom']` keep a single React copy and a working HMR path.
+Reason: the library's `exports` map points at `dist/`, and `dist` is produced by the build. The example must run without requiring a prior `pnpm build`, otherwise `pnpm -C examples/vite-react dev` fails out of the box. Vite aliases with exact regex entries (`playground`, `styles.css`, `fonts.css`, then bare `@atlis/deract`) and `dedupe: ['react', 'react-dom']` keep a single React copy and a working HMR path. TypeScript resolves the same files through `tsconfig.paths`, and both ends must agree.
 Alternatives: force a build first (worse DX, and pins the example to whatever the build emits); publish a `src` subpath in `exports` (pollutes the package surface for a dev-only need).
-
-## The GSAP example reads `env.contexts.motion` in JS; the CSS-transition entries rely on `[data-motion="reduce"]`
-Reason: GSAP cannot be disabled from CSS alone — a JS tween must be skipped at the call site. Plain CSS transitions on `.ex-btn` and `.ex-counter` are neutralised by the `[data-motion="reduce"]` rule, which is the pattern the README asks entries to adopt. Both approaches live side by side in the example so the architect can see the choice.
-Alternatives: force every entry to check `env.contexts.motion` (burdensome for CSS-driven entries); rely on `prefers-reduced-motion` alone (does not work inside an iframe that the playground cannot force).
-
-## The Counter's `update` resets its internal count only when the `start` arg changes
-Reason: an `update` that silently discards the user's clicks would be a surprise; resetting only on an explicit `start` change is predictable and demonstrates the update-vs-remount contract cleanly.
-Alternatives: reset on every update (breaks the "state lives in the entry" model); never reset (surprises when `start` changes and nothing happens).
-
-## The example resolves `@atlis/deract/*` through both Vite aliases AND tsconfig `paths` pointing at library source
-Reason: Vite aliases fix runtime; TypeScript only knows about `paths`. Until `packages/deract/dist` exists (piece 8's build), the example cannot use the published `exports` map, so both ends must agree on "the example compiles against `src`". Once `dist` ships, this pair can be retired in favour of a normal workspace dependency and removed from the example's tsconfig.
-Alternatives: publish `src` as an additional subpath in `exports` (pollutes the package surface); require a build first (bad DX, breaks `pnpm dev` out of the box).
 
 ## `vite.config.ts` uses `fileURLToPath(import.meta.url)` instead of `__dirname`
 Reason: `"type": "module"` means the config is ESM, where `__dirname` does not exist. `fileURLToPath` is the portable equivalent.
@@ -250,3 +172,87 @@ Alternatives: `new URL(..., import.meta.url).pathname` (URL-encoded on Windows, 
 
 ## `@types/node` is a devDependency of the example only, not of `packages/deract`
 Reason: `vite.config.ts` needs it; the library must never import `node:*` at runtime, and keeping `@types/node` out of the library's devDependencies is a structural reminder of that.
+
+## The GSAP example reads `env.contexts.motion` in JS; the CSS-transition entries rely on `[data-motion="reduce"]`
+Reason: GSAP cannot be disabled from CSS alone — a JS tween must be skipped at the call site. Plain CSS transitions on `.ex-btn` and `.ex-counter` are neutralised by the `[data-motion="reduce"]` rule, which is the pattern the README asks entries to adopt.
+Alternatives: force every entry to check `env.contexts.motion` (burdensome for CSS-driven entries); rely on `prefers-reduced-motion` alone (does not work inside an iframe that the playground cannot force).
+
+## The Counter's `update` resets its internal count only when the `start` arg changes
+Reason: an `update` that silently discards the user's clicks would be a surprise; resetting only on an explicit `start` change is predictable and demonstrates the update-vs-remount contract cleanly.
+Alternatives: reset on every update (breaks the "state lives in the entry" model); never reset (surprises when `start` changes and nothing happens).
+
+---
+
+## Chrome light/dark is a two-state toggle persisted to localStorage under `dct-chrome`, overriding `prefers-color-scheme`
+Reason: the chrome follows the OS by default. A user who clicks the toggle overrides the OS for the session and across reloads. Clearing `localStorage.dct-chrome` restores auto. The canvas is unaffected: it stays on the Theme context, which is `data-theme` on the canvas root.
+Alternatives: three-state toggle (auto/light/dark) — more UI, more code, same outcome via "clear localStorage"; OS-only (no override — the LATER item asked for a manual toggle).
+
+## The chrome toggle lives in the brand bar, `margin-left: auto`
+Reason: one obvious home for it; the brand bar is above every other chrome surface so the affordance is always visible.
+Alternatives: bottom-right FAB (competing with the props panel), settings popover (too much UI for a single toggle).
+
+## "/" focuses the sidebar search when the user is not typing
+Reason: it is the standard shortcut for search, discoverable via the placeholder hint, and harmless (we skip it inside inputs, textareas, selects, and contenteditable).
+Alternatives: Cmd/Ctrl+K (also nice, easy to add later, but "/" is one keystroke), no shortcut (LATER item asked for one).
+
+## Errors thrown in the canvas's event handlers and promises are logged and forwarded to `onCanvasError`; they do not show the entry error panel
+Reason: the entry error boundary is for render-time exceptions (which React can catch). Event handler and promise errors are outside React's reach. Surfacing them as a panel would flood the UI on a single bad click; logging plus an optional callback gives the host control without noise.
+Alternatives: `window.onerror` in the host document (misses iframe-scoped errors), let them disappear (they currently disappear — that's the bug we're fixing).
+
+## Custom viewport is a synthesized `ViewportPreset { id: 'custom' }`, not a new type
+Reason: the rest of the code (Canvas `frameStyle`, `Env.viewport`, tests) already handles a `ViewportPreset` with `width: number | null` and an optional `height`. Synthesizing `{ id: 'custom', label: 'Custom', width, height }` reuses that path with zero new interfaces. The preset is never listed in `viewportPresets`; it only appears when the user activates it.
+Alternatives: extend `ViewportPreset` with a `custom` variant (breaks user-supplied presets), add a separate `customViewport` state field (extra field to thread through everywhere).
+
+## The URL gains `vw` and `vh` only when `vp=custom`, and only when valid
+Reason: named presets already encode their dimensions; duplicating them in the URL would let a stale URL fight a preset change. `vw`/`vh` are cleared the moment the user picks a preset, so the hash reflects a single source of truth.
+Alternatives: always write `vw`/`vh` (URL churn), encode dimensions in `vp` as `vp=420x640` (harder to read, ambiguous for presets).
+
+## `setViewport('custom')` alone is a no-op; `setCustomViewport(width, height?)` is the action
+Reason: "custom" without dimensions is not a meaningful state. `setCustomViewport` always sets dimensions; `setViewport(presetId)` always clears them. The URL rewrite decides validity, not the action.
+Alternatives: single `setViewport(id, width?, height?)` (harder to read at call sites).
+
+## The rotate button is disabled until both W and H are set
+Reason: rotating a width-only viewport has no defined meaning. Once height exists, rotate swaps them and the URL updates through the same `setCustomViewport` path. Rotate is not stored in the hash; the swapped values are.
+Alternatives: encode rotation as `rot=1` (redundant state, easy to get out of sync), hide the button entirely (loses the affordance).
+
+## Switching from custom back to a preset discards the custom dimensions
+Reason: the URL cannot carry both `vp=phone` and `vw=420` without ambiguity, and keeping dimensions hidden in state means two sources of truth. The custom editor pre-fills from whatever preset is active, so re-entering custom is one click, not four.
+Alternatives: remember the last custom dims in state (extra field, harder to reason about), reset to a fixed default each time (worse UX).
+
+## The playground chrome is `data-dct-chrome`, the canvas theme is `data-theme` on the canvas root
+Reason: two different switches. `data-dct-chrome` is a manual user preference persisted to `localStorage.dct-chrome`; it affects only the surrounding UI. `data-theme` on the canvas root is chosen per-entry and is what `themeContext` applies. Neither leaks into the other.
+Alternatives: one attribute shared by both (couples UI and canvas in a surprising way).
+
+---
+
+## Publishing targets `dist`, source stays out of the tarball
+Reason: `tsc` emits ESM `.js`, `.d.ts` and `.d.ts.map`; `scripts/copy-assets.mjs` copies `styles.css`, `fonts.css`, `logo.svg` and `fonts/` in. `files` lists only `dist`, `README.md` and `DERACT-USAGE.md`, so consumers get nothing they can't use. `exports` maps every entry point at `dist/`, and `sideEffects: ["*.css"]` tells bundlers they can tree-shake JS.
+Alternatives: ship `src` for consumers' bundlers (more bytes, exposes internals), use tsup/rollup to bundle (adds a dev dep and a build step; tsc is enough at this size).
+
+## React and React DOM are optional peer dependencies
+Reason: core has no React runtime dependency. A consumer who only uses `defineComponent` and the plain-DOM path does not need React installed. The playground imports React at runtime, so consumers using it will naturally have React in their tree — but we do not force it.
+Alternatives: required peers (fails core-only installs), no peer declaration (bundlers can double-bundle React).
+
+## `scripts/size.mjs` uses approximate minification via regex, not a minifier dep
+Reason: the spec forbids adding a dependency for the size script ("built-in zlib, not a new dependency"). The regex minifier strips block comments, line comments (excluding `://` URLs), and collapses whitespace around operators. It is 2–5% larger than `terser` output, which keeps the reported numbers honest by erring high against the targets.
+Alternatives: `terser` (better accuracy, adds a dev dep the spec forbids), report raw gzip (misleadingly larger, could fail spurious targets).
+
+## Size targets are hard limits, not goals; the final report lists overruns, not adjustments
+Reason: the spec is explicit ("Do not silently raise the targets"). If any measurement exceeds its target, the report says so and piece 8 revisits that surface before declaring done; the target value itself does not move.
+Alternatives: relax targets to hit green (dishonest).
+
+---
+
+## Considered and rejected: mirroring styles through CSSOM (`insertRule`, `adoptedStyleSheets`)
+Reason: `adoptedStyleSheets` cannot be shared cross-document in every browser, breaks `@import`, and breaks relative `url()` resolution against the target document (so fonts/images 404 in the mirrored copy). The current `<style>`/`<link>` cloning delegates all of that to the browser and is strictly more correct.
+Alternatives: read `document.styleSheets[i].cssRules` and `insertRule` each rule into a constructed sheet on the target (more code, same limitations), keep cloning (chosen).
+
+## Considered and rejected for v0.1: branded website and docs site
+Reason: the spec scopes v0.1 to a library; a website/docs site is a separate project that should follow a stable API. `DERACT-USAGE.md` is the architect-facing reference; a real docs site is v0.2 work.
+
+## Considered and deferred: resizable sidebar/main split, collapsible sidebar, theme swatches
+Reason:
+- **Resizable split:** needs pointer-event plumbing and its own hash state; adds surface area before size and stability gates.
+- **Collapsible sidebar:** every collapse state is a layout the CSS has to hold together; worth doing once the layout is settled, not immediately before shipping v0.1.
+- **Theme swatches:** requires a `preview` field on `ContextOption`, which is a public API addition. Belongs in a v0.2 design pass.
+See LATER.md.
