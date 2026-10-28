@@ -27,3 +27,15 @@ Alternatives: build new arrays each call (causes render loops).
 ## `color-scheme` is set through style.setProperty
 Reason: restoring the previous inline value on cleanup, which also works in jsdom without crashing.
 Alternatives: a `colorScheme` property (not typed or supported everywhere).
+
+## `vp` in the hash holds the viewport preset id, not the width
+Reason: the spec example showed `vp=360`, but ids stay valid for custom presets (several could share a width, or be "fit").
+Alternatives: store the width (ambiguous for custom presets).
+
+## The hash module only parses and formats; it does not validate against the registry
+Reason: it stays pure and testable. The Playground drops unknown entry, variant, context and viewport values.
+Alternatives: validate inside the hash module (couples it to the registry).
+
+## The hash stores only user edits to args, not defaults
+Reason: shorter URLs, and links keep working when defaults change.
+Alternatives: store all args (long URLs, stale on default changes).
