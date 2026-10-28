@@ -51,6 +51,10 @@
     "react": { "optional": true },
     "react-dom": { "optional": true }
   },
+    "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "devDependencies": {
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.0.1",
