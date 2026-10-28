@@ -21,6 +21,27 @@ export interface PlaygroundProps {
 
 const DEFAULT_CONTEXTS: readonly ContextDef[] = [themeContext, reducedMotionContext];
 
+function Brand() {
+  return (
+    <header className="dct-brand">
+      <span className="dct-brand-mark" aria-hidden="true">
+        <svg
+          viewBox="0 0 32 32"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="square"
+        >
+          <path d="M11 6H5v20h6" />
+          <path d="M21 6h6v20h-6" />
+          <path d="M19.5 5 12.5 27" />
+        </svg>
+      </span>
+      <span className="dct-brand-name">Deract</span>
+    </header>
+  );
+}
+
 export function Playground(props: PlaygroundProps) {
   const {
     registry,
@@ -40,7 +61,8 @@ export function Playground(props: PlaygroundProps) {
 
   if (!entry) {
     return (
-      <div className="dct-playground dct-playground-empty">
+      <div className="dct-playground">
+        <Brand />
         <p className="dct-empty" role="status">
           No components registered yet.
         </p>
@@ -50,8 +72,13 @@ export function Playground(props: PlaygroundProps) {
 
   return (
     <div className="dct-playground">
+      <Brand />
       <aside className="dct-sidebar-region">
-        <Sidebar groups={state.groups} selectedId={entry.id} onSelect={state.selectEntry} />
+        <Sidebar
+          groups={state.groups}
+          selectedId={entry.id}
+          onSelect={state.selectEntry}
+        />
       </aside>
       <div className="dct-main">
         <Toolbar
@@ -82,7 +109,11 @@ export function Playground(props: PlaygroundProps) {
               <EntryView entry={entry} args={state.args} env={env} target={target} />
             )}
           </Canvas>
-          <PropsPanel controls={entry.controls ?? {}} args={state.args} onArg={state.setArg} />
+          <PropsPanel
+            controls={entry.controls ?? {}}
+            args={state.args}
+            onArg={state.setArg}
+          />
         </div>
       </div>
     </div>

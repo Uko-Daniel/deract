@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="64" height="64"
+     fill="none" stroke="#1D4ED8" stroke-width="2.5" stroke-linecap="square"
+     role="img" aria-label="Deract">
+  <title>Deract</title>
+  <path d="M11 6H5v20h6"/>
+  <path d="M21 6h6v20h-6"/>
+  <path d="M19.5 5 12.5 27"/>
+</svg>

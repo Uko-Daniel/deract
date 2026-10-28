@@ -6,6 +6,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
-    "size": "pnpm --filter @atlis/deract size"
+    "size": "pnpm --filter @atlis/deract size",
+    "fonts:fetch": "node scripts/fetch-font.mjs"
   }
 }

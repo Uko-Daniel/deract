@@ -176,3 +176,50 @@ Reason: sighted users see the current value; screen readers still announce "Size
 
 ## The copy success/failure toast resets after 1.5 s
 Reason: it is acknowledgement, not a persistent state. Matches the brief "Copied!" feedback pattern.
+
+## Chrome palette is light and dark, driven by `prefers-color-scheme` on `.dct-playground`
+Reason: matches the spec's "follows the OS", and the same token set works for a future manual toggle without any CSS changes.
+Contrast ratios checked against `--dct-surface`:
+  light: ink 17.83:1, muted 5.43:1, accent 6.72:1, accent-strong on tint 7.91:1, border 3.30:1
+  dark:  ink 14.49:1, muted 6.90:1, accent 7.01:1, accent-strong on tint 8.10:1, border 3.75:1
+The border tokens were darkened from the original blue-gray proposal (`#D5DCE8` light) because it fell below the WCAG 2.1 non-text 3:1 threshold; `#7F8FA3` light and `#64748B` dark pass.
+Alternatives: a lighter decorative border (fails 3:1), a manual toggle (deferred to LATER.md).
+
+## `--dct-on-accent` flips between light and dark instead of forcing white
+Reason: white on #60A5FA in dark mode is only 2.54:1 (fails). Dark ink #0F172A on #60A5FA is 7.01:1. The selected segment therefore shows as a bright chip with dark text in dark mode.
+Alternatives: use a darker accent in dark mode (less vivid), force white everywhere (fails dark mode).
+
+## All chrome rules live inside `@layer deract`
+Reason: an unlayered consumer stylesheet overrides layered rules automatically, so "override the tokens" or "restyle a control" works without `!important` or higher-specificity selectors.
+Alternatives: high-specificity selectors (fragile), CSS custom properties only (limits structural overrides).
+
+## The canvas (`iframe` body and inline root) does not follow OS dark mode; only `data-theme` on the root does
+Reason: the spec is explicit. The iframe's `color-scheme: light` and the `.dct-canvas-root[data-theme]` rules make `data-theme` the only switch that affects the canvas, and give native form elements inside the canvas the correct palette when the entry uses one.
+Alternatives: let the iframe follow the OS (violates the spec), ignore `data-theme` on the root (breaks entries that rely on it).
+
+## Layout breakpoints at 800px (props panel wraps below the canvas) and 560px (sidebar stacks above)
+Reason: the spec asks for 360 px usable; at ≤560px the whole playground becomes a vertical stack and every panel scrolls on its own.
+
+## Focus ring is a 2 px solid `--dct-focus` with 1 px offset on every interactive element
+Reason: visible focus for keyboard users; the ring color follows the accent so it flips with the OS.
+
+## Reduced motion: animations and transitions are killed via a `prefers-reduced-motion: reduce` block, and `scroll-behavior` is reset to `auto`
+Reason: the spec asks for `prefers-reduced-motion` respected on the chrome. Entries must do the same in their own CSS; the README will say so.
+
+## Space Grotesk (weight 600) ships as a Latin subset at `fonts.css` + `fonts/`, opt-in
+Reason: the founder approved option B — a bundled local font, offline, but not part of the default install. `fonts.css` is a separate export, so consumers who don't import it pay zero bytes. The woff2 is fetched once, at dev time, from Google Fonts' prebuilt Latin subset (`scripts/fetch-font.mjs`) and committed; there is no runtime network call.
+Deviation from spec: the spec said "no web fonts". The font is bundled locally, under SIL OFL 1.1, and does not violate offline or "no CDN" because it loads from the package.
+Alternatives: A (font stack only — loses the look on most machines); C (self-host whole family — 3+ weights, too much weight for a wordmark).
+
+## Error panel selectors are `.dct-error`, `.dct-error-title`, `.dct-error-stack`
+Reason: they match the component shipped in piece 4 (error.tsx). The earlier `.dct-error-panel` name is gone; a mismatch would leave the canvas error unstyled.
+
+## Brand header spans the top of the playground (`grid-area: brand`, `grid-column: 1 / -1`)
+Reason: logo and wordmark belong to the whole playground, not to the sidebar. Sidebar is a component list; putting branding inside it conflates two things and would make the sidebar semantics odd (`<nav aria-label="Components">` containing a brand is noise for screen readers).
+Alternatives: brand inside the sidebar header (muddies the nav landmark), no brand (loses identity).
+
+## The inline logo uses `currentColor`, the standalone `logo.svg` uses the fixed accent
+Reason: the chrome logo must flip with the light/dark token set; the file is for docs, website and favicon where a stable brand color is correct.
+
+## `fonts.css` falls back gracefully when the woff2 is missing
+Reason: consumers who clone the repo without running `pnpm fonts:fetch` still get a working playground with system fonts. No test asserts on the font loading, so a missing file cannot fail CI.

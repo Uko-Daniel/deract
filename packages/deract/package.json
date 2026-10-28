@@ -19,7 +19,9 @@
       "types": "./dist/playground/index.d.ts",
       "default": "./dist/playground/index.js"
     },
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": "./dist/styles.css",
+    "./fonts.css": "./dist/fonts.css",
+    "./logo.svg": "./dist/logo.svg"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

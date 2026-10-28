@@ -34,4 +34,11 @@ describe('Playground', () => {
     expect(screen.getByRole('status').textContent).toBe('No components registered yet.');
     expect(document.querySelector('iframe')).toBeNull();
   });
+
+  it('renders the brand header with the logo and wordmark', () => {
+    render(<Playground registry={registry} />);
+    expect(screen.getByText('Deract')).toBeTruthy();
+    const brand = document.querySelector('.dct-brand');
+    expect(brand?.querySelector('svg')).toBeTruthy();
+  });
 });
