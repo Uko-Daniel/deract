@@ -1,129 +1,153 @@
-import { useState } from 'react';
-import { createPortal } from 'react-dom';
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { act, cleanup, render, waitFor } from '@testing-library/react';
-import { Canvas, type CanvasSize, type CanvasTarget } from './canvas';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ContextDef } from '../contexts';
+import { Canvas, type CanvasProps } from './canvas';
 
 afterEach(cleanup);
 
-const holder = () => ({
-  target: null as CanvasTarget | null,
-  size: null as CanvasSize | null,
+const baseProps = (over: Partial<CanvasProps> = {}): CanvasProps => ({
+  contexts: [],
+  contextValues: {},
+  viewport: undefined,
+  isolation: 'iframe',
+  onSize: () => {},
+  children: () => null,
+  ...over,
 });
 
-function Counter({ onPress }: { onPress: () => void }) {
-  const [n, setN] = useState(0);
-  return (
-    <button
-      onClick={() => {
-        setN(n + 1);
-        onPress();
-      }}
-    >
-      {n}
-    </button>
-  );
+function getIframe(): HTMLIFrameElement {
+  const iframe = document.querySelector('iframe');
+  if (!iframe) throw new Error('no iframe rendered');
+  return iframe as HTMLIFrameElement;
 }
 
-describe('Canvas (iframe)', () => {
-  it('gives children the iframe document, not the host document', async () => {
-    const h = holder();
-    const { container } = render(
-      <Canvas>
-        {(t, s) => {
-          h.target = t;
-          h.size = s;
-          return null;
-        }}
-      </Canvas>,
-    );
-    await waitFor(() => expect(h.target).not.toBeNull());
-
-    const frame = container.querySelector('iframe')!;
-    const t = h.target!;
-    expect(t.document).toBe(frame.contentDocument);
-    expect(t.document).not.toBe(document);
-    expect(t.window).toBe(frame.contentWindow);
-    expect(t.root).toBe(frame.contentDocument!.documentElement);
-    expect(t.document.body.contains(t.container)).toBe(true);
-    expect(h.size?.width).toBe(t.window.innerWidth);
+describe('Canvas: iframe rendering', () => {
+  it('renders an iframe and portals the entry into its body', () => {
+    render(<Canvas {...baseProps()}>{() => <button>Click me</button>}</Canvas>);
+    const iframe = getIframe();
+    fireEvent.load(iframe);
+    const button = iframe.contentDocument!.querySelector('button');
+    expect(button).toBeTruthy();
+    expect(button!.textContent).toBe('Click me');
   });
 
-  it('delivers React onClick and state updates inside the iframe portal', async () => {
-    const h = holder();
-    const onPress = vi.fn();
-    render(
-      <Canvas>
-        {(t) => {
-          h.target = t;
-          return createPortal(<Counter onPress={onPress} />, t.container);
-        }}
-      </Canvas>,
-    );
-    await waitFor(() => expect(h.target?.container.querySelector('button')).not.toBeNull());
+  it('fires onClick from a React entry rendered inside the iframe portal', () => {
+    const onClick = vi.fn();
+    render(<Canvas {...baseProps()}>{() => <button onClick={onClick}>Go</button>}</Canvas>);
+    const iframe = getIframe();
+    fireEvent.load(iframe);
 
-    const button = () => h.target!.container.querySelector('button')!;
-    expect(button().ownerDocument).toBe(h.target!.document); // really in the iframe
+    const button = iframe.contentDocument!.querySelector('button')!;
+    const win = iframe.contentDocument!.defaultView!;
+    button.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true }));
 
-    act(() => button().click());
-    expect(onPress).toHaveBeenCalledTimes(1);
-    expect(button().textContent).toBe('1');
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it('mirrors host styles into the iframe', async () => {
+  it('mirrors host <style> tags into the iframe head, and picks up new ones', async () => {
     const style = document.createElement('style');
-    style.textContent = '.dct-test{color:red}';
-    document.head.append(style);
-    const h = holder();
-    render(
-      <Canvas>
-        {(t) => {
-          h.target = t;
-          return null;
-        }}
-      </Canvas>,
-    );
-    await waitFor(() => expect(h.target).not.toBeNull());
-    expect(h.target!.document.head.textContent).toContain('.dct-test{color:red}');
-    style.remove();
-  });
+    style.textContent = '.mirrored { color: red; }';
+    document.head.appendChild(style);
+    try {
+      render(<Canvas {...baseProps()}>{() => <div className="mirrored">hi</div>}</Canvas>);
+      const iframe = getIframe();
+      fireEvent.load(iframe);
+      const mirrored = iframe.contentDocument!.head.querySelector('style[data-dct-mirrored]');
+      expect(mirrored).toBeTruthy();
+      expect(mirrored!.textContent).toContain('.mirrored { color: red; }');
 
-  it('removes its container and stops mirroring on unmount', async () => {
-    const h = holder();
-    const { unmount } = render(
-      <Canvas>
-        {(t) => {
-          h.target = t;
-          return null;
-        }}
-      </Canvas>,
-    );
-    await waitFor(() => expect(h.target).not.toBeNull());
-    const { container, document: frameDoc } = h.target!;
-    unmount();
-    expect(container.parentNode).toBeNull();
-    expect(frameDoc.head.querySelector('[data-dct-mirror]')).toBeNull();
+      const second = document.createElement('style');
+      second.textContent = '.later { color: blue; }';
+      document.head.appendChild(second);
+      // MutationObserver callbacks are microtasks; wait for them.
+      await new Promise((r) => setTimeout(r, 0));
+      const all = Array.from(
+        iframe.contentDocument!.head.querySelectorAll('style[data-dct-mirrored]'),
+      );
+      expect(all.some((n) => n.textContent?.includes('.later { color: blue; }'))).toBe(true);
+      second.remove();
+    } finally {
+      style.remove();
+    }
   });
 });
 
-describe('Canvas (isolation none)', () => {
-  it('renders in a plain div of the host document', async () => {
-    const h = holder();
-    const { container } = render(
-      <Canvas isolation="none" width={360}>
-        {(t, s) => {
-          h.target = t;
-          h.size = s;
-          return null;
-        }}
+describe('Canvas: contexts', () => {
+  const theme: ContextDef = {
+    id: 'theme',
+    label: 'Theme',
+    default: 'light',
+    options: [
+      { id: 'light', label: 'Light' },
+      { id: 'dark', label: 'Dark' },
+    ],
+  };
+
+  it('sets data-<id> on the canvas root when no apply is given', () => {
+    render(
+      <Canvas {...baseProps({ contexts: [theme], contextValues: { theme: 'dark' } })}>
+        {() => null}
       </Canvas>,
     );
-    await waitFor(() => expect(h.target).not.toBeNull());
+    const iframe = getIframe();
+    fireEvent.load(iframe);
+    const root = iframe.contentDocument!.getElementById('dct-canvas-root')!;
+    expect(root.getAttribute('data-theme')).toBe('dark');
+  });
 
-    expect(container.querySelector('iframe')).toBeNull();
-    expect(h.target!.document).toBe(document);
-    expect(h.target!.root).toBe(h.target!.container);
-    expect(document.body.contains(h.target!.container)).toBe(true);
-    expect(h.size?.width).toBe(360);
+  it('calls a custom apply and runs its cleanup on unmount', () => {
+    const cleanupFn = vi.fn();
+    const apply = vi.fn(() => cleanupFn);
+    const custom: ContextDef = {
+      id: 'x',
+      label: 'X',
+      default: 'a',
+      options: [{ id: 'a', label: 'A' }],
+      apply,
+    };
+    const { unmount } = render(
+      <Canvas {...baseProps({ contexts: [custom], contextValues: { x: 'a' } })}>
+        {() => null}
+      </Canvas>,
+    );
+    const iframe = getIframe();
+    fireEvent.load(iframe);
+    expect(apply).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(cleanupFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not crash when a custom apply throws', () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const bad: ContextDef = {
+      id: 'bad',
+      label: 'Bad',
+      default: 'a',
+      options: [{ id: 'a', label: 'A' }],
+      apply: () => {
+        throw new Error('boom');
+      },
+    };
+    render(
+      <Canvas {...baseProps({ contexts: [bad], contextValues: { bad: 'a' } })}>
+        {() => null}
+      </Canvas>,
+    );
+    const iframe = getIframe();
+    fireEvent.load(iframe);
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+});
+
+describe('Canvas: isolation "none"', () => {
+  it('renders in a plain div with no iframe', () => {
+    render(
+      <Canvas {...baseProps({ isolation: 'none' })}>
+        {() => <span>inline child</span>}
+      </Canvas>,
+    );
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(screen.getByText('inline child')).toBeTruthy();
   });
 });

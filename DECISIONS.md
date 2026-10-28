@@ -126,3 +126,53 @@ Alternatives: wrap window.onerror in the iframe (noisy, global, and out of v0.1 
 ## args and env must be referentially stable between renders
 Reason: EntryView compares them by identity to decide between update and remount. The Playground memoises them.
 Alternatives: deep compare (cost on every render, and env holds window/document).
+
+## Chrome follows the OS light/dark setting (light and dark palettes, all via --dct-* variables)
+Reason: the founder wants both modes, and this matches the original spec. The canvas is never affected.
+Supersedes the earlier "light-only" decision.
+
+## Space Grotesk: option B, a bundled Latin subset as an optional `fonts.css` export
+Reason: offline-safe because the file is local, and the look appears on every machine.
+Deviation from spec: the spec said no web fonts, and the exports map gains `./fonts.css`. The font is reported separately from the size targets.
+
+## Segmented controls are native radio inputs inside a fieldset with a legend
+Reason: browsers already provide the correct keyboard model (Tab into the group, arrows change selection) and screen readers announce the group, so no custom keyboard code is needed.
+Alternatives: custom buttons with role="radio" and our own arrow handling (more code, easier to get wrong).
+
+## The toolbar is role="group", not role="toolbar"
+Reason: the toolbar role promises roving-focus keyboard behaviour we do not implement.
+
+## The viewport width readout is not an aria-live region
+Reason: it changes continuously while resizing, so announcing it would flood screen readers.
+
+## The Variant select is hidden when an entry has no variants; Reset is disabled until args are edited
+Reason: less clutter, and no control that can do nothing.
+Alternatives: always show them disabled (layout jumps less, but more noise).
+
+## The sidebar search matches title, id and group name; arrow keys are an extra on top of native Tab/Enter
+Reason: the spec asks for a fully keyboard-operable sidebar, and Tab/Enter already satisfy it. Arrows are a convenience.
+
+## Sidebar and Toolbar are presentational (props in, callbacks out)
+Reason: all playground logic lives in usePlaygroundState, so these panels can be tested without it.
+
+## Props panel inputs are the native HTML element for each control type
+Reason: real `<label>`s, real keyboard and screen-reader behaviour, no custom widgets.
+Alternatives: a single generic widget (breaks keyboard contracts), a design-system component (adds bytes).
+
+## The Copy button writes pretty-printed JSON of the effective args
+Reason: the most useful paste for bug reports and for copying a working config into a variant.
+Alternatives: compact JSON (harder to read), a diff against defaults (more code, less obvious).
+
+## Copy failure is surfaced inline as "Copy failed" rather than thrown
+Reason: clipboard permissions are environment-dependent; the user should see why nothing happened.
+Alternatives: silent failure (confusing), `alert()` (ugly, blocks the playground).
+
+## The number input treats an empty field as a request to reset to the control default
+Reason: keeps the input controlled, avoids `NaN` flowing into args, and matches "clear = reset" intuition.
+Alternatives: ignore the clear (input desyncs from state), reject the change (input stays empty, confusing).
+
+## The range value is rendered next to the label and marked `aria-hidden`
+Reason: sighted users see the current value; screen readers still announce "Size" plus the slider's own value, without double-announcing.
+
+## The copy success/failure toast resets after 1.5 s
+Reason: it is acknowledgement, not a persistent state. Matches the brief "Copied!" feedback pattern.

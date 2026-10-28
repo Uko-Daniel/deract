@@ -1,138 +1,327 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { mirrorStyles } from './mirror-styles';
-
-export interface CanvasTarget {
-  document: Document;
-  window: Window;
-  /** Contexts are applied here: the iframe's <html>, or the plain div. */
-  root: HTMLElement;
-  /** Entries render or mount here. */
-  container: HTMLElement;
-}
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
+import type { ContextDef } from '../contexts';
+import type { Cleanup, Env } from '../types';
+import type { ViewportPreset } from '../viewports';
 
 export interface CanvasSize {
   width: number;
   height: number;
 }
 
-export interface CanvasProps {
-  isolation?: 'iframe' | 'none';
-  /** null or undefined = fill the available space */
-  width?: number | null;
-  height?: number | null;
-  /** Read once when the iframe attaches. Change the React key to reload them. */
-  stylesheets?: readonly string[];
-  children: (target: CanvasTarget, size: CanvasSize) => ReactNode;
+/**
+ * What the canvas exposes to the caller. `container` is where React portals
+ * into (the iframe's body or the inline wrapper); `root` is where contexts
+ * are applied and where non-React code mounts.
+ */
+export interface CanvasTarget {
+  document: Document;
+  window: Window;
+  root: HTMLElement;
+  container: HTMLElement;
 }
 
-type InnerProps = Omit<CanvasProps, 'isolation'>;
+export interface CanvasProps {
+  contexts: readonly ContextDef[];
+  contextValues: Readonly<Record<string, string>>;
+  viewport: ViewportPreset | undefined;
+  stylesheets?: readonly string[];
+  isolation: 'iframe' | 'none';
+  title?: string;
+  onSize?(size: CanvasSize): void;
+  /** Render prop: the caller renders the entry, given the env and the mount target. */
+  children: (env: Env, target: CanvasTarget) => ReactNode;
+}
 
-// srcdoc gives the iframe a doctype (standards mode) and a consistent async load.
-// Its content is NOT relied on: we build the structure in code after load.
-const SRC_DOC = '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>';
+const MIRROR_SELECTOR = 'style, link[rel="stylesheet"]';
 
-function IframeCanvas({ width, height, stylesheets, children }: InnerProps) {
-  const frameRef = useRef<HTMLIFrameElement>(null);
-  const loaded = useRef(false);
-  const attachedDoc = useRef<Document | null>(null);
-  const detach = useRef<(() => void) | null>(null);
-  const sheets = useRef(stylesheets);
+function useMirrorStyles(
+  hostDoc: Document | null,
+  targetDoc: Document | null,
+  extraHrefs: readonly string[] | undefined,
+): void {
+  const extraKey = (extraHrefs ?? []).join('\u0000');
+
+  useEffect(() => {
+    if (!hostDoc || !targetDoc) return;
+    const win = hostDoc.defaultView;
+    if (!win) return;
+    const head = targetDoc.head;
+    const clones = new Map<Element, Element>();
+    const extras: HTMLElement[] = [];
+
+    const sync = () => {
+      const present = new Set<Element>();
+      hostDoc.querySelectorAll(MIRROR_SELECTOR).forEach((node) => {
+        present.add(node);
+        const existing = clones.get(node);
+        if (existing) {
+          if (node.tagName === 'STYLE' && existing.textContent !== node.textContent) {
+            existing.textContent = node.textContent;
+          }
+        } else {
+          const clone = targetDoc.importNode(node, true) as Element;
+          clone.setAttribute('data-dct-mirrored', '');
+          head.appendChild(clone);
+          clones.set(node, clone);
+        }
+      });
+      for (const [orig, clone] of clones) {
+        if (!present.has(orig) || !orig.isConnected) {
+          clone.remove();
+          clones.delete(orig);
+        }
+      }
+    };
+
+    sync();
+    for (const href of extraHrefs ?? []) {
+      const link = targetDoc.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.setAttribute('data-dct-mirrored', '');
+      head.appendChild(link);
+      extras.push(link);
+    }
+
+    const observer = new win.MutationObserver(sync);
+    observer.observe(hostDoc.head, { childList: true, subtree: true, characterData: true });
+
+    return () => {
+      observer.disconnect();
+      for (const clone of clones.values()) clone.remove();
+      clones.clear();
+      for (const link of extras) link.remove();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hostDoc, targetDoc, extraKey]);
+}
+
+function useApplyContexts(
+  root: HTMLElement | null,
+  contexts: readonly ContextDef[],
+  values: Readonly<Record<string, string>>,
+): void {
+  useEffect(() => {
+    if (!root) return;
+    const doc = root.ownerDocument;
+    const cleanups: Cleanup[] = [];
+
+    for (const ctx of contexts) {
+      const optionId = values[ctx.id];
+      if (optionId === undefined) continue;
+      const option = ctx.options.find((o) => o.id === optionId);
+      if (!option) continue;
+      try {
+        if (ctx.apply) {
+          const result = ctx.apply({ root, document: doc }, option);
+          if (typeof result === 'function') cleanups.push(result);
+        } else {
+          const attr = `data-${ctx.id}`;
+          root.setAttribute(attr, option.id);
+          cleanups.push(() => root.removeAttribute(attr));
+        }
+      } catch (err) {
+        if (typeof console !== 'undefined') {
+          console.error(`[deract] context "${ctx.id}" apply threw`, err);
+        }
+      }
+    }
+
+    return () => {
+      for (const c of cleanups) {
+        try {
+          c();
+        } catch {
+          /* ignore cleanup errors */
+        }
+      }
+    };
+  }, [root, contexts, values]);
+}
+
+function frameStyle(vp: ViewportPreset | undefined): CSSProperties | undefined {
+  if (!vp) return undefined;
+  const s: CSSProperties = {};
+  if (vp.width !== null) {
+    s.width = `${vp.width}px`;
+    s.maxWidth = '100%';
+  }
+  if (vp.height != null) s.height = `${vp.height}px`;
+  return Object.keys(s).length > 0 ? s : undefined;
+}
+
+const IFRAME_INLINE: CSSProperties = { border: 0, display: 'block', width: '100%', height: '100%' };
+
+export function Canvas(props: CanvasProps) {
+  return props.isolation === 'iframe' ? <IframeCanvas {...props} /> : <InlineCanvas {...props} />;
+}
+
+function IframeCanvas({
+  contexts,
+  contextValues,
+  viewport,
+  stylesheets,
+  title = 'Component preview',
+  onSize,
+  children,
+}: CanvasProps) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [target, setTarget] = useState<CanvasTarget | null>(null);
+  const targetRef = useRef<CanvasTarget | null>(null);
   const [size, setSize] = useState<CanvasSize>({ width: 0, height: 0 });
 
-  const teardown = useCallback(() => {
-    detach.current?.();
-    detach.current = null;
-    attachedDoc.current = null;
-  }, []);
-
-  // Idempotent: calling it twice for the same document does nothing.
-  const attach = useCallback(() => {
-    const frame = frameRef.current;
-    const doc = frame?.contentDocument;
-    const win = frame?.contentWindow;
-    if (!doc || !win || !doc.body || doc === attachedDoc.current) return;
-
-    teardown(); // a new document replaced the old one
-    attachedDoc.current = doc;
-
-    const container = doc.createElement('div');
-    container.setAttribute('data-dct-root', '');
-    doc.body.append(container);
-
-    const mirror = mirrorStyles(document, doc, sheets.current ?? []);
-    const measure = () => setSize({ width: win.innerWidth, height: win.innerHeight });
-    win.addEventListener('resize', measure);
-
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
     let cancelled = false;
-    void mirror.ready.then(() => {
+
+    const setup = () => {
       if (cancelled) return;
-      measure();
-      setTarget({ document: doc, window: win, root: doc.documentElement, container });
-    });
+      const doc = iframe.contentDocument;
+      if (!doc || !doc.body) return;
+      const win = doc.defaultView;
+      if (!win) return;
+      if (targetRef.current?.document === doc) return;
 
-    detach.current = () => {
-      cancelled = true;
-      win.removeEventListener('resize', measure);
-      mirror.stop();
-      container.remove();
-      setTarget(null);
+      doc.body.style.margin = '0';
+      let root = doc.getElementById('dct-canvas-root') as HTMLElement | null;
+      if (!root) {
+        root = doc.createElement('div');
+        root.id = 'dct-canvas-root';
+        root.className = 'dct-canvas-root';
+        root.style.boxSizing = 'border-box';
+        root.style.minHeight = '100%';
+        doc.body.appendChild(root);
+      }
+      const next: CanvasTarget = { document: doc, window: win, root, container: root };
+      targetRef.current = next;
+      setTarget(next);
     };
-  }, [teardown]);
 
-  // StrictMode (dev) runs effects twice and the iframe will not fire load again,
-  // so if it already loaded we must re-attach here.
+    setup();
+    iframe.addEventListener('load', setup);
+    return () => {
+      cancelled = true;
+      iframe.removeEventListener('load', setup);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!target) return;
+    const measure = () => {
+      const rect = target.root.getBoundingClientRect();
+      const next = { width: rect.width, height: rect.height };
+      setSize((prev) =>
+        prev.width === next.width && prev.height === next.height ? prev : next,
+      );
+    };
+    measure();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(measure);
+      ro.observe(target.root);
+    }
+    return () => {
+      if (ro) ro.disconnect();
+    };
+  }, [target]);
+
   useEffect(() => {
-    if (loaded.current) attach();
-    return teardown;
-  }, [attach, teardown]);
+    onSize?.(size);
+  }, [size, onSize]);
+
+  const hostDoc = typeof document !== 'undefined' ? document : null;
+  useMirrorStyles(hostDoc, target?.document ?? null, stylesheets);
+  useApplyContexts(target?.root ?? null, contexts, contextValues);
+
+  const env = useMemo<Env | null>(() => {
+    if (!target) return null;
+    return {
+      contexts: contextValues,
+      viewport: { width: size.width, height: size.height },
+      document: target.document,
+      window: target.window,
+    };
+  }, [target, contextValues, size.width, size.height]);
+
+  const onFrameClick = useCallback(() => {
+    /* no-op; the iframe is not focusable content of ours */
+  }, []);
 
   return (
-    <>
-      <iframe
-        ref={frameRef}
-        title="Component canvas"
-        srcDoc={SRC_DOC}
-        onLoad={() => {
-          loaded.current = true;
-          attach();
-        }}
-        style={{ display: 'block', border: 0, width: width ?? '100%', height: height ?? '100%' }}
-      />
-      {target ? children(target, size) : null}
-    </>
+    <div className="dct-canvas-frame" style={frameStyle(viewport)} onClick={onFrameClick}>
+      <iframe ref={iframeRef} title={title} className="dct-canvas-iframe" style={IFRAME_INLINE} />
+      {target && env ? createPortal(children(env, target), target.container) : null}
+    </div>
   );
 }
 
-function PlainCanvas({ width, height, children }: InnerProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [target, setTarget] = useState<CanvasTarget | null>(null);
-  const [host, setHost] = useState(() => ({
-    width: window.innerWidth,
-    height: window.innerHeight,
-  }));
+function InlineCanvas({
+  contexts,
+  contextValues,
+  viewport,
+  onSize,
+  children,
+}: CanvasProps) {
+  const [root, setRoot] = useState<HTMLDivElement | null>(null);
+  const [size, setSize] = useState<CanvasSize>({ width: 0, height: 0 });
+
+  useLayoutEffect(() => {
+    if (!root) return;
+    const measure = () => {
+      const rect = root.getBoundingClientRect();
+      const next = { width: rect.width, height: rect.height };
+      setSize((prev) =>
+        prev.width === next.width && prev.height === next.height ? prev : next,
+      );
+    };
+    measure();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(measure);
+      ro.observe(root);
+    }
+    return () => {
+      if (ro) ro.disconnect();
+    };
+  }, [root]);
 
   useEffect(() => {
-    const measure = () => setHost({ width: window.innerWidth, height: window.innerHeight });
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, []);
+    onSize?.(size);
+  }, [size, onSize]);
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    setTarget({ document, window, root: el, container: el });
-    return () => setTarget(null);
-  }, []);
+  useApplyContexts(root, contexts, contextValues);
+
+  const env = useMemo<Env | null>(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return null;
+    return {
+      contexts: contextValues,
+      viewport: { width: size.width, height: size.height },
+      document: window.document,
+      window,
+    };
+  }, [contextValues, size.width, size.height]);
+
+  const target: CanvasTarget | null =
+    root && typeof window !== 'undefined'
+      ? { document: window.document, window, root, container: root }
+      : null;
 
   return (
-    <>
-      <div ref={ref} style={{ width: width ?? '100%', height: height ?? '100%', overflow: 'auto' }} />
-      {target ? children(target, { width: width ?? host.width, height: height ?? host.height }) : null}
-    </>
+    <div className="dct-canvas-frame dct-canvas-frame-inline" style={frameStyle(viewport)}>
+      <div ref={setRoot} className="dct-canvas-root dct-canvas-root-inline">
+        {root && env && target ? children(env, target) : null}
+      </div>
+    </div>
   );
-}
-
-export function Canvas({ isolation = 'iframe', ...rest }: CanvasProps) {
-  return isolation === 'none' ? <PlainCanvas {...rest} /> : <IframeCanvas {...rest} />;
 }

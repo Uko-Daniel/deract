@@ -1,0 +1,355 @@
+/* @atlis/deract — playground chrome. Every class is prefixed dct-. */
+
+@layer deract {
+  .dct-playground {
+    /* Palette — light. Contrast ratios are checked against --dct-surface. */
+    --dct-accent: #1D4ED8;         /* vs surface: 6.72:1  (AA)  */
+    --dct-accent-strong: #1E40AF;  /* hover / selected text     */
+    --dct-accent-tint: #EFF4FF;    /* hover bg / selected row   */
+    --dct-on-accent: #FFFFFF;      /* text on --dct-accent      */
+    --dct-ink: #0F172A;            /* vs surface: 17.83:1 (AAA) */
+    --dct-muted: #5B6B82;          /* vs surface: 5.43:1  (AA)  */
+    --dct-border: #7F8FA3;         /* vs surface: 3.30:1  (>=3) */
+    --dct-surface: #FFFFFF;
+    --dct-canvas-bg: #F4F6FA;
+    --dct-focus: #1D4ED8;
+    --dct-radius: 6px;
+    --dct-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --dct-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    height: 100vh;
+    min-height: 480px;
+    font: 14px/1.4 var(--dct-font);
+    color: var(--dct-ink);
+    background: var(--dct-canvas-bg);
+    color-scheme: light dark;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .dct-playground {
+      --dct-accent: #60A5FA;         /* vs surface: 7.01:1  (AAA-large / AA-normal) */
+      --dct-accent-strong: #93C5FD;  /* selected text on tint: 8.10:1 */
+      --dct-accent-tint: #1E293B;
+      --dct-on-accent: #0F172A;      /* on accent: 7.01:1 */
+      --dct-ink: #E2E8F0;            /* vs surface: 14.49:1 (AAA) */
+      --dct-muted: #94A3B8;          /* vs surface: 6.90:1  (AA)  */
+      --dct-border: #64748B;         /* vs surface: 3.75:1  (>=3) */
+      --dct-surface: #0F172A;
+      --dct-canvas-bg: #020617;
+      --dct-focus: #60A5FA;
+    }
+  }
+
+  .dct-playground *,
+  .dct-playground *::before,
+  .dct-playground *::after {
+    box-sizing: inherit;
+  }
+
+  /* ---------- Sidebar ---------- */
+
+  .dct-sidebar-region {
+    border-right: 1px solid var(--dct-border);
+    background: var(--dct-surface);
+    overflow-y: auto;
+    min-width: 0;
+  }
+  .dct-sidebar { padding: 12px; display: flex; flex-direction: column; gap: 16px; }
+  .dct-search-input {
+    width: 100%;
+    padding: 8px 10px;
+    font: inherit;
+    color: var(--dct-ink);
+    background: var(--dct-surface);
+    border: 1px solid var(--dct-border);
+    border-radius: var(--dct-radius);
+  }
+  .dct-search-input:focus-visible {
+    outline: 2px solid var(--dct-focus);
+    outline-offset: 1px;
+  }
+
+  .dct-group { margin: 0; }
+  .dct-group-title {
+    margin: 0 0 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--dct-muted);
+  }
+  .dct-list { list-style: none; margin: 0; padding: 0; }
+  .dct-item {
+    display: block;
+    width: 100%;
+    padding: 6px 8px;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    border-radius: var(--dct-radius);
+    cursor: pointer;
+  }
+  .dct-item:hover { background: var(--dct-accent-tint); }
+  .dct-item[aria-current="true"] {
+    background: var(--dct-accent-tint);
+    color: var(--dct-accent-strong);
+    font-weight: 600;
+  }
+  .dct-item:focus-visible {
+    outline: 2px solid var(--dct-focus);
+    outline-offset: 1px;
+  }
+
+  /* ---------- Main + Toolbar ---------- */
+
+  .dct-main { display: flex; flex-direction: column; min-width: 0; }
+  .dct-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--dct-border);
+    background: var(--dct-surface);
+  }
+  .dct-field { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0; border: 0; }
+  .dct-label { font-size: 12px; color: var(--dct-muted); }
+
+  .dct-segments {
+    display: inline-flex;
+    border: 1px solid var(--dct-border);
+    border-radius: var(--dct-radius);
+    overflow: hidden;
+  }
+  .dct-segment { position: relative; }
+  .dct-segment input { position: absolute; opacity: 0; pointer-events: none; }
+  .dct-segment span {
+    display: inline-block;
+    padding: 5px 10px;
+    font-size: 13px;
+    color: var(--dct-ink);
+    cursor: pointer;
+    user-select: none;
+  }
+  .dct-segment:not(:last-child) span { border-right: 1px solid var(--dct-border); }
+  .dct-segment input:checked + span {
+    background: var(--dct-accent);
+    color: var(--dct-on-accent);
+  }
+  .dct-segment input:focus-visible + span {
+    outline: 2px solid var(--dct-focus);
+    outline-offset: -2px;
+  }
+
+  .dct-select {
+    font: inherit;
+    padding: 4px 6px;
+    color: var(--dct-ink);
+    background: var(--dct-surface);
+    border: 1px solid var(--dct-border);
+    border-radius: var(--dct-radius);
+  }
+  .dct-select:focus-visible {
+    outline: 2px solid var(--dct-focus);
+    outline-offset: 1px;
+  }
+
+  .dct-readout {
+    font-size: 12px;
+    color: var(--dct-muted);
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .dct-readout-value { color: var(--dct-ink); font-variant-numeric: tabular-nums; }
+
+  .dct-button {
+    font: inherit;
+    padding: 6px 12px;
+    color: var(--dct-ink);
+    background: var(--dct-surface);
+    border: 1px solid var(--dct-border);
+    border-radius: var(--dct-radius);
+    cursor: pointer;
+  }
+  .dct-button:hover:not(:disabled) { background: var(--dct-accent-tint); }
+  .dct-button:focus-visible {
+    outline: 2px solid var(--dct-focus);
+    outline-offset: 1px;
+  }
+  .dct-button:disabled { opacity: .5; cursor: not-allowed; }
+  .dct-button-small { padding: 4px 8px; font-size: 12px; }
+
+  /* ---------- Content: canvas + props ---------- */
+
+  .dct-content {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    overflow: hidden;
+  }
+  .dct-canvas-frame {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    padding: 16px;
+    background: var(--dct-canvas-bg);
+    overflow: auto;
+    min-height: 0;
+  }
+  .dct-canvas-iframe {
+    flex: 1 1 auto;
+    max-width: 100%;
+    border: 0;
+    border-radius: var(--dct-radius);
+    background: #fff;
+    color-scheme: light; /* the canvas does not follow OS dark; data-theme on the root does */
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  .dct-canvas-root { padding: 16px; min-height: 100%; box-sizing: border-box; }
+  .dct-canvas-root[data-theme="light"] { color-scheme: light; }
+  .dct-canvas-root[data-theme="dark"] { color-scheme: dark; background: #0F172A; color: #E2E8F0; }
+
+  .dct-canvas-frame-inline { padding: 0; }
+  .dct-canvas-root-inline {
+    flex: 1 1 auto;
+    padding: 16px;
+    background: #fff;
+    border-radius: var(--dct-radius);
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+
+  .dct-props {
+    border-left: 1px solid var(--dct-border);
+    background: var(--dct-surface);
+    overflow-y: auto;
+    padding: 12px;
+    min-width: 0;
+  }
+  .dct-props-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .dct-props-title {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--dct-muted);
+  }
+  .dct-props-list { display: flex; flex-direction: column; gap: 12px; }
+  .dct-prop { display: flex; flex-direction: column; gap: 4px; }
+  .dct-prop-inline { flex-direction: row; align-items: center; gap: 8px; }
+  .dct-prop-value { color: var(--dct-muted); font-variant-numeric: tabular-nums; margin-left: 4px; }
+
+  .dct-input {
+    font: inherit;
+    padding: 6px 8px;
+    color: var(--dct-ink);
+    background: var(--dct-surface);
+    border: 1px solid var(--dct-border);
+    border-radius: var(--dct-radius);
+    width: 100%;
+  }
+  .dct-input:focus-visible {
+    outline: 2px solid var(--dct-focus);
+    outline-offset: 1px;
+  }
+  .dct-range { padding: 0; }
+  .dct-color { padding: 2px; height: 32px; width: 100%; }
+  .dct-checkbox { width: 16px; height: 16px; accent-color: var(--dct-accent); }
+
+  /* ---------- Empty, error, sr-only ---------- */
+
+  .dct-empty { padding: 16px; color: var(--dct-muted); font-size: 13px; margin: 0; }
+
+  .dct-error-panel,
+  .dct-error {
+    margin: 12px;
+    padding: 12px;
+    border: 1px solid #FCA5A5;
+    background: #FEF2F2;
+    color: #7F1D1D;
+    border-radius: var(--dct-radius);
+    font-size: 13px;
+  }
+  .dct-error-panel pre,
+  .dct-error pre {
+    margin: 8px 0 0;
+    padding: 8px;
+    overflow: auto;
+    background: #FFF;
+    border: 1px solid #FCA5A5;
+    border-radius: var(--dct-radius);
+    font: 12px/1.4 var(--dct-mono);
+    white-space: pre-wrap;
+  }
+  @media (prefers-color-scheme: dark) {
+    .dct-error-panel,
+    .dct-error { border-color: #7F1D1D; background: #450A0A; color: #FECACA; }
+    .dct-error-panel pre,
+    .dct-error pre { background: #1F0B0B; border-color: #7F1D1D; }
+  }
+
+  .dct-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* ---------- Responsive: usable at 360 px ---------- */
+
+  @media (max-width: 800px) {
+    .dct-playground { grid-template-columns: 200px 1fr; }
+    .dct-content { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+    .dct-props {
+      border-left: 0;
+      border-top: 1px solid var(--dct-border);
+      max-height: 40vh;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .dct-playground {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+      height: auto;
+      min-height: 100vh;
+    }
+    .dct-sidebar-region {
+      border-right: 0;
+      border-bottom: 1px solid var(--dct-border);
+      max-height: 40vh;
+    }
+    .dct-toolbar { gap: 8px; padding: 8px 10px; }
+    .dct-content { grid-template-rows: minmax(240px, 1fr) auto; }
+  }
+
+  /* ---------- Reduced motion ---------- */
+
+  @media (prefers-reduced-motion: reduce) {
+    .dct-playground *,
+    .dct-playground *::before,
+    .dct-playground *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
