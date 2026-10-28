@@ -1,0 +1,51 @@
+{
+  "name": "@atlis/deract",
+  "version": "0.1.0",
+  "description": "Tiny, offline-first component playground for any UI library.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./playground": {
+      "types": "./dist/playground/index.d.ts",
+      "default": "./dist/playground/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "echo build-comes-later",
+    "size": "echo size-comes-later"
+  },
+  "peerDependencies": {
+    "@types/react": "^18 || ^19",
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "^18 || ^19",
+    "@types/react-dom": "^19.3.0",
+    "jsdom": "^30.1.3",
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
