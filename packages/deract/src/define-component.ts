@@ -1,6 +1,6 @@
 import type { ArgsOf, ControlDef, Controls, Entry } from './types';
 
-function checkValue(c: ControlDef, v: unknown): string | null {
+export function checkValue(c: ControlDef, v: unknown): string | null {
   switch (c.type) {
     case 'text':
     case 'color':
