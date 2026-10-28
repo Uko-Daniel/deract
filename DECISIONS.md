@@ -59,3 +59,23 @@ Alternatives: none possible without a different API.
 ## The runner calls onError(null) after every success
 Reason: the UI clears a stale error panel without extra state tracking.
 Alternatives: a separate onSuccess callback (more API for the same result).
+
+## Style mirroring reconciles the whole <head> list on every mutation
+Reason: one idempotent function is simpler and cannot drift, unlike handling add/remove/change/reorder separately.
+Alternatives: per-mutation handlers (more code, more edge cases).
+
+## Only the host's <head> is mirrored
+Reason: that is where Vite, CSS files and most CSS-in-JS dev builds put styles.
+Alternatives: also observe <body> (rare, adds cost).
+
+## Known limitation: styles created through the CSSOM are not mirrored
+Reason: insertRule(), adoptedStyleSheets and CSS-in-JS "speedy" production mode leave no DOM text to copy.
+Alternatives: serialise document.styleSheets rules (large and fragile).
+
+## Mounting waits for copied <link> stylesheets, capped at 2 seconds
+Reason: avoids entries measuring unstyled elements. The cap means a dead link cannot freeze the canvas.
+Alternatives: mount immediately (flash of unstyled content, wrong measurements).
+
+## Extra stylesheets (props.stylesheets) are placed after the mirrored host styles
+Reason: lets the Playground user override host CSS predictably.
+Alternatives: before (host CSS would win conflicts).
