@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": ["vite/client"],
+    "paths": {
+      "@atlis/deract": ["../../packages/deract/src/index.ts"],
+      "@atlis/deract/playground": ["../../packages/deract/src/playground/index.ts"],
+      "@atlis/deract/styles.css": ["../../packages/deract/src/styles.css"],
+      "@atlis/deract/fonts.css": ["../../packages/deract/src/fonts.css"]
+    }
+  },
+  "include": ["src", "vite.config.ts", "vite-env.d.ts"]
+}

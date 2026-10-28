@@ -81,7 +81,7 @@ export function Playground(props: PlaygroundProps) {
         />
       </aside>
       <div className="dct-main">
-        <Toolbar
+          <Toolbar
           variantNames={state.variantNames}
           variant={state.variant}
           onVariant={state.selectVariant}
@@ -91,6 +91,13 @@ export function Playground(props: PlaygroundProps) {
           viewports={viewports}
           viewportId={state.viewport?.id}
           onViewport={state.setViewport}
+          customWidth={
+            state.viewport?.id === 'custom' ? state.viewport.width ?? undefined : undefined
+          }
+          customHeight={
+            state.viewport?.id === 'custom' ? state.viewport.height ?? null : undefined
+          }
+          onCustomViewport={state.setCustomViewport}
           width={width}
           edited={state.edited}
           onReset={state.reset}

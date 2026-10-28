@@ -18,17 +18,14 @@ export interface CanvasSize {
   height: number;
 }
 
-/**
- * What the canvas exposes to the caller. `container` is where React portals
- * into (the iframe's body or the inline wrapper); `root` is where contexts
- * are applied and where non-React code mounts.
- */
 export interface CanvasTarget {
   document: Document;
   window: Window;
   root: HTMLElement;
   container: HTMLElement;
 }
+
+export type CanvasErrorSource = 'error' | 'unhandledrejection';
 
 export interface CanvasProps {
   contexts: readonly ContextDef[];
@@ -38,7 +35,12 @@ export interface CanvasProps {
   isolation: 'iframe' | 'none';
   title?: string;
   onSize?(size: CanvasSize): void;
-  /** Render prop: the caller renders the entry, given the env and the mount target. */
+  /**
+   * Fires for errors thrown outside React's render (event handlers, timers,
+   * unhandled promise rejections). The canvas always logs them; this lets the
+   * host surface them too.
+   */
+  onCanvasError?(error: Error, source: CanvasErrorSource): void;
   children: (env: Env, target: CanvasTarget) => ReactNode;
 }
 
@@ -149,6 +151,46 @@ function useApplyContexts(
   }, [root, contexts, values]);
 }
 
+function useCatchCanvasErrors(
+  target: CanvasTarget | null,
+  onError: ((error: Error, source: CanvasErrorSource) => void) | undefined,
+): void {
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
+  useEffect(() => {
+    if (!target) return;
+    const win = target.window;
+
+    const report = (error: Error, source: CanvasErrorSource) => {
+      console.error(`[deract] ${source} inside canvas:`, error);
+      onErrorRef.current?.(error, source);
+    };
+
+    const onWindowError = (event: ErrorEvent) => {
+      const err =
+        event.error instanceof Error
+          ? event.error
+          : new Error(event.message || 'Uncaught error inside canvas');
+      report(err, 'error');
+    };
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const err =
+        event.reason instanceof Error
+          ? event.reason
+          : new Error(String(event.reason ?? 'Unhandled promise rejection inside canvas'));
+      report(err, 'unhandledrejection');
+    };
+
+    win.addEventListener('error', onWindowError);
+    win.addEventListener('unhandledrejection', onRejection);
+    return () => {
+      win.removeEventListener('error', onWindowError);
+      win.removeEventListener('unhandledrejection', onRejection);
+    };
+  }, [target]);
+}
+
 function frameStyle(vp: ViewportPreset | undefined): CSSProperties | undefined {
   if (!vp) return undefined;
   const s: CSSProperties = {};
@@ -160,7 +202,12 @@ function frameStyle(vp: ViewportPreset | undefined): CSSProperties | undefined {
   return Object.keys(s).length > 0 ? s : undefined;
 }
 
-const IFRAME_INLINE: CSSProperties = { border: 0, display: 'block', width: '100%', height: '100%' };
+const IFRAME_INLINE: CSSProperties = {
+  border: 0,
+  display: 'block',
+  width: '100%',
+  height: '100%',
+};
 
 export function Canvas(props: CanvasProps) {
   return props.isolation === 'iframe' ? <IframeCanvas {...props} /> : <InlineCanvas {...props} />;
@@ -173,6 +220,7 @@ function IframeCanvas({
   stylesheets,
   title = 'Component preview',
   onSize,
+  onCanvasError,
   children,
 }: CanvasProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -243,6 +291,7 @@ function IframeCanvas({
   const hostDoc = typeof document !== 'undefined' ? document : null;
   useMirrorStyles(hostDoc, target?.document ?? null, stylesheets);
   useApplyContexts(target?.root ?? null, contexts, contextValues);
+  useCatchCanvasErrors(target, onCanvasError);
 
   const env = useMemo<Env | null>(() => {
     if (!target) return null;
@@ -255,7 +304,7 @@ function IframeCanvas({
   }, [target, contextValues, size.width, size.height]);
 
   const onFrameClick = useCallback(() => {
-    /* no-op; the iframe is not focusable content of ours */
+    /* no-op */
   }, []);
 
   return (
@@ -271,6 +320,7 @@ function InlineCanvas({
   contextValues,
   viewport,
   onSize,
+  onCanvasError,
   children,
 }: CanvasProps) {
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
@@ -316,6 +366,8 @@ function InlineCanvas({
     root && typeof window !== 'undefined'
       ? { document: window.document, window, root, container: root }
       : null;
+
+  useCatchCanvasErrors(target, onCanvasError);
 
   return (
     <div className="dct-canvas-frame dct-canvas-frame-inline" style={frameStyle(viewport)}>

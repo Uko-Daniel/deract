@@ -1,9 +1,8 @@
-import { useId, useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { Entry } from '../types';
 
 export type Groups = ReadonlyMap<string, readonly Entry<any>[]>;
 
-/** Pure and testable: keeps groups that still have entries after filtering. */
 export function filterGroups(
   groups: Groups,
   query: string,
@@ -29,10 +28,28 @@ export interface SidebarProps {
 export function Sidebar({ groups, selectedId, onSelect }: SidebarProps) {
   const uid = useId();
   const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
   const visible = useMemo(() => filterGroups(groups, query), [groups, query]);
 
-  // ArrowUp/ArrowDown move between the search box and the items; Home/End jump
-  // within the items. Tab and Enter work natively, so this is an extra.
+  // "/" focuses search when the user is not typing somewhere else.
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
+      const t = event.target as HTMLElement | null;
+      if (t) {
+        const tag = t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable) {
+          return;
+        }
+      }
+      event.preventDefault();
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   function onKeyDown(e: KeyboardEvent<HTMLElement>) {
     const nav = e.currentTarget;
     const search = nav.querySelector<HTMLElement>('[data-dct-search]');
@@ -45,7 +62,7 @@ export function Sidebar({ groups, selectedId, onSelect }: SidebarProps) {
     let next = -1;
     if (e.key === 'ArrowDown') next = Math.min(at + 1, stops.length - 1);
     else if (e.key === 'ArrowUp' && !onSearch) next = Math.max(at - 1, 0);
-    else if (e.key === 'Home' && !onSearch) next = search ? 1 : 0; // inputs keep Home/End for the caret
+    else if (e.key === 'Home' && !onSearch) next = search ? 1 : 0;
     else if (e.key === 'End' && !onSearch) next = stops.length - 1;
     if (next === -1) return;
 
@@ -60,12 +77,13 @@ export function Sidebar({ groups, selectedId, onSelect }: SidebarProps) {
           Search components
         </label>
         <input
+          ref={searchRef}
           id={`${uid}-search`}
           data-dct-search=""
           className="dct-search-input"
           type="search"
           autoComplete="off"
-          placeholder="Search components…"
+          placeholder="Search components… ( / )"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />

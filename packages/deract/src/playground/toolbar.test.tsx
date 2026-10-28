@@ -93,4 +93,60 @@ describe('Toolbar: viewport and reset', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
     expect(p.onReset).toHaveBeenCalledTimes(1);
   });
+
+  describe('Toolbar: custom viewport', () => {
+  it('hides the Custom button when onCustomViewport is not provided', () => {
+    render(<Toolbar {...base()} />);
+    expect(screen.queryByRole('button', { name: 'Custom' })).toBeNull();
+  });
+
+  it('shows the Custom button and W/H inputs when custom mode is active', () => {
+    const onCustomViewport = vi.fn();
+    render(
+      <Toolbar
+        {...base({
+          onCustomViewport,
+          viewportId: 'custom',
+          customWidth: 420,
+          customHeight: 640,
+        })}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Custom' })).toBeTruthy();
+    expect((screen.getByLabelText('W') as HTMLInputElement).value).toBe('420');
+    expect((screen.getByLabelText('H') as HTMLInputElement).value).toBe('640');
+  });
+
+  it('calls onCustomViewport when the W or H fields change', () => {
+    const onCustomViewport = vi.fn();
+    render(
+      <Toolbar
+        {...base({
+          onCustomViewport,
+          viewportId: 'custom',
+          customWidth: 420,
+          customHeight: 640,
+        })}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('W'), { target: { value: '500' } });
+    expect(onCustomViewport).toHaveBeenCalledWith(500, 640);
+  });
+
+  it('rotates by swapping W and H', () => {
+    const onCustomViewport = vi.fn();
+    render(
+      <Toolbar
+        {...base({
+          onCustomViewport,
+          viewportId: 'custom',
+          customWidth: 420,
+          customHeight: 640,
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate viewport' }));
+    expect(onCustomViewport).toHaveBeenCalledWith(640, 420);
+  });
+});
 });

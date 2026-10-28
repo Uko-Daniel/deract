@@ -1,12 +1,17 @@
 {
-  "name": "deract-monorepo",
+  "name": "deract",
   "private": true,
+  "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@9.12.0",
   "scripts": {
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "build": "pnpm -r build",
-    "size": "pnpm --filter @atlis/deract size",
+    "build": "pnpm -C packages/deract build && pnpm -C examples/vite-react build",
+    "size": "node scripts/size.mjs",
     "fonts:fetch": "node scripts/fetch-font.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
   }
 }

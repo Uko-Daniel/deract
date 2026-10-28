@@ -1,0 +1,114 @@
+/* Entry styles. Loaded on the host page and mirrored into the canvas iframe.
+ * The [data-theme="dark"] and [data-motion="reduce"] rules here are exactly
+ * what the spec asks the example to demonstrate: the canvas root carries those
+ * attributes, so these selectors reach inside the iframe. */
+
+/* ---------- Button ---------- */
+
+.ex-btn {
+  font: inherit;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.ex-btn-sm { padding: 6px 10px; font-size: 13px; }
+.ex-btn-md { padding: 8px 14px; font-size: 14px; }
+.ex-btn-lg { padding: 10px 18px; font-size: 16px; }
+
+.ex-btn-primary { background: #1d4ed8; color: #fff; }
+.ex-btn-primary:hover:not(:disabled) { background: #1e40af; }
+.ex-btn-secondary { background: #eff4ff; color: #1e40af; border-color: #c7d2fe; }
+.ex-btn-secondary:hover:not(:disabled) { background: #dbeafe; }
+.ex-btn-ghost { background: transparent; color: #1d4ed8; }
+.ex-btn-ghost:hover:not(:disabled) { background: #eff4ff; }
+.ex-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+[data-theme='dark'] .ex-btn-primary { background: #60a5fa; color: #0f172a; }
+[data-theme='dark'] .ex-btn-primary:hover:not(:disabled) { background: #93c5fd; }
+[data-theme='dark'] .ex-btn-secondary {
+  background: #1e293b;
+  color: #93c5fd;
+  border-color: #334155;
+}
+[data-theme='dark'] .ex-btn-secondary:hover:not(:disabled) { background: #334155; }
+[data-theme='dark'] .ex-btn-ghost { color: #60a5fa; }
+[data-theme='dark'] .ex-btn-ghost:hover:not(:disabled) { background: #1e293b; }
+
+/* ---------- Counter ---------- */
+
+.ex-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  font: 16px/1 system-ui, sans-serif;
+  border: 1px solid #d5dce8;
+  border-radius: 8px;
+  background: #fff;
+}
+.ex-counter > span {
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+  text-align: center;
+  transition: color 0.15s ease;
+}
+.ex-counter > button {
+  font: inherit;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #d5dce8;
+  background: #f4f6fa;
+  cursor: pointer;
+}
+.ex-counter > button:hover { background: #eff4ff; }
+
+[data-theme='dark'] .ex-counter { border-color: #334155; background: #0f172a; color: #e2e8f0; }
+[data-theme='dark'] .ex-counter > button {
+  border-color: #334155;
+  background: #1e293b;
+  color: #e2e8f0;
+}
+[data-theme='dark'] .ex-counter > button:hover { background: #334155; }
+
+/* ---------- GSAP ---------- */
+
+.ex-gsap-track {
+  width: 100%;
+  max-width: 640px;
+  height: 80px;
+  border-radius: 8px;
+  background: #f4f6fa;
+  border: 1px solid #d5dce8;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  overflow: hidden;
+}
+.ex-gsap-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #1d4ed8;
+  will-change: transform;
+}
+
+[data-theme='dark'] .ex-gsap-track { background: #020617; border-color: #334155; }
+[data-theme='dark'] .ex-gsap-box { background: #60a5fa; }
+
+/* ---------- Reduced motion ----------
+ * The GSAP entry reads env.contexts.motion and skips animation entirely.
+ * These rules catch the CSS-transition case, which entries don't have to
+ * check in JS. */
+
+[data-motion='reduce'] *,
+[data-motion='reduce'] *::before,
+[data-motion='reduce'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}

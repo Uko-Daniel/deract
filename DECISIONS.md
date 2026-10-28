@@ -223,3 +223,30 @@ Reason: the chrome logo must flip with the light/dark token set; the file is for
 
 ## `fonts.css` falls back gracefully when the woff2 is missing
 Reason: consumers who clone the repo without running `pnpm fonts:fetch` still get a working playground with system fonts. No test asserts on the font loading, so a missing file cannot fail CI.
+
+
+## `DECISIONS.md` addendum
+
+```md
+## The example aliases `@atlis/deract/*` at source level for dev
+Reason: the library's `exports` map points at `dist/`, and `dist` is produced by the build that piece 8 introduces. The example must run without requiring a prior `pnpm build`, otherwise `pnpm -C examples/vite-react dev` fails out of the box. Vite aliases with exact regex entries (`playground`, `styles.css`, `fonts.css`, then bare `@atlis/deract`) and `dedupe: ['react', 'react-dom']` keep a single React copy and a working HMR path.
+Alternatives: force a build first (worse DX, and pins the example to whatever the build emits); publish a `src` subpath in `exports` (pollutes the package surface for a dev-only need).
+
+## The GSAP example reads `env.contexts.motion` in JS; the CSS-transition entries rely on `[data-motion="reduce"]`
+Reason: GSAP cannot be disabled from CSS alone — a JS tween must be skipped at the call site. Plain CSS transitions on `.ex-btn` and `.ex-counter` are neutralised by the `[data-motion="reduce"]` rule, which is the pattern the README asks entries to adopt. Both approaches live side by side in the example so the architect can see the choice.
+Alternatives: force every entry to check `env.contexts.motion` (burdensome for CSS-driven entries); rely on `prefers-reduced-motion` alone (does not work inside an iframe that the playground cannot force).
+
+## The Counter's `update` resets its internal count only when the `start` arg changes
+Reason: an `update` that silently discards the user's clicks would be a surprise; resetting only on an explicit `start` change is predictable and demonstrates the update-vs-remount contract cleanly.
+Alternatives: reset on every update (breaks the "state lives in the entry" model); never reset (surprises when `start` changes and nothing happens).
+
+## The example resolves `@atlis/deract/*` through both Vite aliases AND tsconfig `paths` pointing at library source
+Reason: Vite aliases fix runtime; TypeScript only knows about `paths`. Until `packages/deract/dist` exists (piece 8's build), the example cannot use the published `exports` map, so both ends must agree on "the example compiles against `src`". Once `dist` ships, this pair can be retired in favour of a normal workspace dependency and removed from the example's tsconfig.
+Alternatives: publish `src` as an additional subpath in `exports` (pollutes the package surface); require a build first (bad DX, breaks `pnpm dev` out of the box).
+
+## `vite.config.ts` uses `fileURLToPath(import.meta.url)` instead of `__dirname`
+Reason: `"type": "module"` means the config is ESM, where `__dirname` does not exist. `fileURLToPath` is the portable equivalent.
+Alternatives: `new URL(..., import.meta.url).pathname` (URL-encoded on Windows, breaks on paths with spaces).
+
+## `@types/node` is a devDependency of the example only, not of `packages/deract`
+Reason: `vite.config.ts` needs it; the library must never import `node:*` at runtime, and keeping `@types/node` out of the library's devDependencies is a structural reminder of that.
